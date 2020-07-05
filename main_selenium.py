@@ -11,10 +11,11 @@ def clean_opened_processes():
         if proc.name() == "browsermob-proxy":
             proc.kill()
 
+browsermobproxy_location = "browsermob-proxy/bin/browsermob-proxy"
 url = 'https://www.google.com/'
 
 clean_opened_processes()
-server = Server("browsermob-proxy/bin/browsermob-proxy")
+server = Server(browsermobproxy_location)
 server.start()
 time.sleep(1)
 
