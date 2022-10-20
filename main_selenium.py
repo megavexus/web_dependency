@@ -7,6 +7,7 @@ import os
 import time
 import psutil
 import logging
+import click
 
 from pprint import pprint
 
@@ -21,81 +22,78 @@ def create_logger(app_name):
 
 logger = create_logger("dependency_web_checker")
 
-def clean_opened_processes():
-    for proc in psutil.process_iter():
-        # check whether the process name matches
-        if proc.name() == "browsermob-proxy":
-            proc.kill()
+class DepencyGetter():
+    def __init__(self) -> None:
+        self.initialize_mobproxy()
+        self.create_webdriver()
 
+    def __exit__(self):
+        self.driver.quit()
+        self.server.stop()
+        self.clean_opened_processes()
+        logger.info('salida limpia')
 
-def create_mobproxy():
-    browsermobproxy_location = "browsermob-proxy/bin/browsermob-proxy"
-    server = Server(browsermobproxy_location)
-    logger.info("> Levantando servidor BrowerMobProxy")
-    server.start()
-    return server
+    def clean_opened_processes(self):
+        for proc in psutil.process_iter():
+            # check whether the process name matches
+            if proc.name() == "browsermob-proxy":
+                proc.kill()
 
-
-def get_dependencies(url):
-    clean_opened_processes()
-    time.sleep(0.5)
-
-    server = create_mobproxy()
-    proxy = server.create_proxy()
-    time.sleep(0.5)
-
-    options = Options()
-    options.headless = True
-    proxy_host = proxy.host.split(":")[1].replace('/','')
-    proxy_port = proxy.port
+    def initialize_mobproxy(self):
+        browsermobproxy_location = "browsermob-proxy/bin/browsermob-proxy"
+        self.server = Server(browsermobproxy_location)
+        logger.info("> Levantando servidor BrowerMobProxy")
+        self.server.start()
     
-    options.set_preference('dom.file.createInChild', False)
-    options.set_preference('browser.download.folderList', False)
-    options.set_preference('browser.download.manager.showWhenStarting', False)
-    options.set_preference('pdfjs.disabled', False)
+    def create_webdriver(self):
+        self.proxy = self.server.create_proxy()
+        time.sleep(0.5)
 
-    options.set_preference('network.proxy.type', 1)
-    options.set_preference('network.proxy.http', proxy_host)
-    options.set_preference('network.proxy.http_port', proxy_port)
-    options.set_preference('network.proxy.ssl', proxy_host)
-    options.set_preference('network.proxy.ssl_port', proxy_port)
-    #options.set_preference('network.proxy.socks', proxy_host)
-    #options.set_preference('network.proxy.socks_port', proxy_port)
-    #options.set_preference('network.proxy.socks_remote_dns', False)
+        options = Options()
+        options.headless = True
+        proxy_host = self.proxy.host.split(":")[1].replace('/','')
+        proxy_port = self.proxy.port
+        
+        options.set_preference('dom.file.createInChild', False)
+        options.set_preference('browser.download.folderList', False)
+        options.set_preference('browser.download.manager.showWhenStarting', False)
+        options.set_preference('pdfjs.disabled', False)
 
-    logger.info(f"> Configurando Selenium para usar de proxy {proxy_host}:{proxy_port}")
-    driver = webdriver.Firefox(options=options)
+        options.set_preference('network.proxy.type', 1)
+        options.set_preference('network.proxy.http', proxy_host)
+        options.set_preference('network.proxy.http_port', proxy_port)
+        options.set_preference('network.proxy.ssl', proxy_host)
+        options.set_preference('network.proxy.ssl_port', proxy_port)
+        #options.set_preference('network.proxy.socks', proxy_host)
+        #options.set_preference('network.proxy.socks_port', proxy_port)
+        #options.set_preference('network.proxy.socks_remote_dns', False)
 
-    proxy.new_har("captured_elems")
-    logger.info(f"> Obteniendo URL {url}")
-    try:
-        driver.get(url)
+        logger.info(f"> Configurando Selenium para usar de proxy {proxy_host}:{proxy_port}")
+        self.driver = webdriver.Firefox(options=options)
+
+    def get_dependencies(self, url):
+        self.proxy.new_har("captured_elems")
+        logger.info(f"> Obteniendo URL {url}")
+        self.driver.get(url)
         logger.info(f"\t DONE!")
         time.sleep(3)
-    except:
-        server.stop()
-        driver.quit()
-        clean_opened_processes()
-        raise
+        resources = [elem["request"]["url"] for elem in self.proxy.har["log"]["entries"] ]
+        resources = list(set(resources)) # eliminamos duplicados
+        logger.info(f"> Recursos obtenidos {len(resources)}")
+        return resources
 
+@click.command()
+@click.option('--url', '-u', required=True, type=str, multiple=True)
+@click.option('--output_file', '-o', type=click.Path())
+def main(url, output_file):
+    depencygetter = DepencyGetter()
 
-    resources = [elem["request"]["url"] for elem in proxy.har["log"]["entries"] ]
-
-    server.stop()
-    driver.quit()
-    logger.info(f"> Cerrando server")
-
-    resources = list(set(resources)) # eliminamos duplicados
-    logger.info(f"> Recursos obtenidos {len(resources)}")
-    return resources
-
-def main():
-    url = 'https://www.google.com/'
-    dependencies = get_dependencies(url)
-    print(f"- Dependencies for [{url}]:")
-    for dep in dependencies:
-        print(f"\t - {dep}")
-        #pprint(dependencies)
+    for link in url: 
+        dependencies = depencygetter.get_dependencies(link)
+        print(f"- Dependencies for [{link}]:")
+        for dep in dependencies:
+            print(f"\t - {dep}")
+            #pprint(dependencies)
 
 if __name__ == "__main__":
     main()
