@@ -55,10 +55,13 @@ def get_dependencies(url):
     options.set_preference('pdfjs.disabled', False)
 
     options.set_preference('network.proxy.type', 1)
-    options.set_preference('network.proxy.socks', proxy_host)
-    options.set_preference('network.proxy.socks_port', proxy_port)
-    options.set_preference('network.proxy.socks_remote_dns', False)
-    options.set_preference('network.proxy.socks_remote_dns', False)
+    options.set_preference('network.proxy.http', proxy_host)
+    options.set_preference('network.proxy.http_port', proxy_port)
+    options.set_preference('network.proxy.ssl', proxy_host)
+    options.set_preference('network.proxy.ssl_port', proxy_port)
+    #options.set_preference('network.proxy.socks', proxy_host)
+    #options.set_preference('network.proxy.socks_port', proxy_port)
+    #options.set_preference('network.proxy.socks_remote_dns', False)
 
     logger.info(f"> Configurando Selenium para usar de proxy {proxy_host}:{proxy_port}")
     driver = webdriver.Firefox(options=options)
@@ -67,13 +70,14 @@ def get_dependencies(url):
     logger.info(f"> Obteniendo URL {url}")
     try:
         driver.get(url)
+        logger.info(f"\t DONE!")
+        time.sleep(3)
     except:
         server.stop()
         driver.quit()
         clean_opened_processes()
         raise
 
-    time.sleep(3)
 
     resources = [elem["request"]["url"] for elem in proxy.har["log"]["entries"] ]
 
