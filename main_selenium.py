@@ -2,12 +2,14 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from browsermobproxy import Server
+from urllib.parse import urlparse
 
 import os
 import time
 import psutil
 import logging
 import click
+import hashlib
 
 from pprint import pprint
 
@@ -77,10 +79,30 @@ class DepencyGetter():
         self.driver.get(url)
         logger.info(f"\t DONE!")
         time.sleep(3)
-        resources = [elem["request"]["url"] for elem in self.proxy.har["log"]["entries"] ]
-        resources = list(set(resources)) # eliminamos duplicados
+        resources = dict () 
+        for elem in self.proxy.har["log"]["entries"]:
+            urldep = elem["request"]["url"]
+            resources[urldep] = {
+                'date' : elem["startedDateTime"],
+                'urlfather' : url,
+                'depdomain' : urlparse(urldep).netloc,
+                'ip' : elem["serverIPAddress"],
+                'status' : elem["response"]["status"],
+                'size' : elem["response"]["bodySize"],
+                'mimetype' : elem["response"]["content"]["mimeType"],
+                'hash_sha1' : self.getHashOfUrl(urldep)
+            }
+        raise Exception (resources)
         logger.info(f"> Recursos obtenidos {len(resources)}")
         return resources
+
+    def getHashOfUrl(self, url):
+        self.driver.get(url)
+        content = self.driver.page_source
+        h = hashlib.new('sha1')
+        h.update(content.encode('utf8'))
+        hash = h.hexdigest()
+        return hash
 
 @click.command()
 @click.option('--url', '-u', required=True, type=str, multiple=True)
